@@ -1,0 +1,430 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WebGuard EDR Pro | Next-Gen Security</title>
+    <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;600&family=Inter:wght@300;400;500;600;800;900&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-color: #030303;
+            --text-main: #f8fafc;
+            --text-muted: #94a3b8;
+            --accent-cyan: #0ea5e9;
+            --accent-green: #10b981;
+            --accent-purple: #8b5cf6;
+            --font-sans: 'Inter', sans-serif;
+            --font-mono: 'Fira Code', monospace;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            font-family: var(--font-sans);
+            min-height: 100vh;
+            overflow-x: hidden;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            position: relative;
+        }
+
+        /* --- Dynamic Fluid / Mesh Background --- */
+        #mesh-canvas {
+            position: fixed;
+            top: 0; left: 0;
+            width: 100vw; height: 100vh;
+            z-index: 0;
+            pointer-events: none;
+            opacity: 0.8;
+            background: radial-gradient(circle at 50% 50%, rgba(14, 165, 233, 0.05), #030303 70%);
+        }
+
+        /* Cursor Glow Orb */
+        .cursor-glow {
+            position: fixed;
+            width: 800px;
+            height: 800px;
+            border-radius: 50%;
+            background: radial-gradient(circle, rgba(14, 165, 233, 0.15) 0%, rgba(139, 92, 246, 0.05) 40%, transparent 70%);
+            top: 50%; left: 50%;
+            transform: translate(-50%, -50%);
+            pointer-events: none;
+            z-index: 1;
+            transition: width 0.3s, height 0.3s;
+            mix-blend-mode: screen;
+        }
+
+        /* --- Content Layout --- */
+        .container {
+            position: relative;
+            z-index: 10;
+            max-width: 1200px;
+            width: 100%;
+            padding: 40px 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 60px;
+        }
+
+        /* Hero Section */
+        .hero {
+            text-align: center;
+            animation: slideUp 1s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+            max-width: 800px;
+        }
+
+        .status-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 10px;
+            background: rgba(16, 185, 129, 0.1);
+            padding: 8px 20px;
+            border-radius: 30px;
+            font-size: 0.9rem;
+            color: var(--accent-green);
+            border: 1px solid rgba(16, 185, 129, 0.2);
+            font-weight: 600;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+            box-shadow: 0 0 20px rgba(16, 185, 129, 0.1);
+            margin-bottom: 30px;
+            animation: fadeIn 2s ease forwards;
+        }
+
+        .status-dot {
+            width: 8px; height: 8px;
+            background-color: #fff;
+            border-radius: 50%;
+            box-shadow: 0 0 10px #fff, 0 0 20px var(--accent-green);
+            animation: blink 2s infinite ease-in-out;
+        }
+
+        h1 {
+            font-size: clamp(3rem, 6vw, 5.5rem);
+            font-weight: 900;
+            line-height: 1.1;
+            letter-spacing: -2px;
+            margin-bottom: 24px;
+            background: linear-gradient(180deg, #fff 0%, rgba(255,255,255,0.6) 100%);
+            -webkit-background-clip: text;
+            background-clip: text;
+            -webkit-text-fill-color: transparent;
+            text-shadow: 0 20px 40px rgba(0,0,0,0.5);
+        }
+
+        .hero p {
+            font-size: 1.25rem;
+            color: var(--text-muted);
+            line-height: 1.6;
+            margin-bottom: 40px;
+            font-weight: 400;
+        }
+
+        /* CTA Button */
+        .cta-button {
+            position: relative;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            text-decoration: none;
+            background: linear-gradient(135deg, rgba(14, 165, 233, 0.8), rgba(139, 92, 246, 0.8));
+            color: #fff;
+            padding: 20px 48px;
+            border-radius: 100px;
+            font-weight: 600;
+            font-size: 1.1rem;
+            letter-spacing: 1px;
+            overflow: hidden;
+            transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+            border: 1px solid rgba(255,255,255,0.2);
+            box-shadow: 0 10px 30px rgba(14, 165, 233, 0.3), inset 0 2px 0 rgba(255,255,255,0.3);
+        }
+        
+        .cta-button::before { /* Glint effect */
+            content: '';
+            position: absolute;
+            top: 0; left: -100%; width: 50%; height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(255,255,255,0.4), transparent);
+            transform: skewX(-20deg);
+            transition: 0.6s;
+        }
+
+        .cta-button:hover {
+            transform: translateY(-4px) scale(1.02);
+            box-shadow: 0 20px 40px rgba(14, 165, 233, 0.5), 0 0 30px rgba(139, 92, 246, 0.5);
+            border-color: rgba(255,255,255,0.6);
+        }
+
+        .cta-button:hover::before {
+            left: 200%;
+        }
+
+        .cta-button:active {
+            transform: translateY(1px);
+        }
+
+        /* Features Section */
+        .features {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+            gap: 32px;
+            width: 100%;
+            perspective: 1200px;
+            opacity: 0;
+            animation: slideUp 1s 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+        }
+
+        .feature-card {
+            background: linear-gradient(135deg, rgba(25,25,30,0.6) 0%, rgba(10,10,12,0.4) 100%);
+            border: 1px solid rgba(255,255,255,0.05);
+            border-radius: 24px;
+            padding: 40px;
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.6), inset 0 1px 0 rgba(255,255,255,0.1);
+            position: relative;
+            transform-style: preserve-3d;
+            transition: border-color 0.4s ease;
+            cursor: default;
+        }
+
+        /* Ambient Card Light */
+        .feature-card::before {
+            content: '';
+            position: absolute;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: radial-gradient(600px circle at var(--mouse-x, 0) var(--mouse-y, 0), rgba(255,255,255,0.06), transparent 40%);
+            z-index: 1;
+            pointer-events: none;
+            opacity: 0;
+            transition: opacity 0.3s;
+        }
+
+        .feature-card:hover {
+            border-color: rgba(14, 165, 233, 0.4);
+            box-shadow: 0 30px 60px rgba(0,0,0,0.8), inset 0 1px 0 rgba(255,255,255,0.2);
+        }
+
+        .feature-card:hover::before { opacity: 1; }
+
+        .feature-icon {
+            transform: translateZ(30px);
+            width: 60px; height: 60px;
+            background: rgba(14, 165, 233, 0.1);
+            border-radius: 16px;
+            display: flex; align-items: center; justify-content: center;
+            margin-bottom: 24px;
+            border: 1px solid rgba(14, 165, 233, 0.3);
+            color: var(--accent-cyan);
+            font-size: 1.5rem;
+            box-shadow: inset 0 0 20px rgba(14, 165, 233, 0.1);
+        }
+
+        .feature-card h3 {
+            transform: translateZ(25px);
+            font-size: 1.5rem;
+            font-weight: 600;
+            margin-bottom: 16px;
+            letter-spacing: -0.5px;
+        }
+
+        .feature-card p {
+            transform: translateZ(20px);
+            color: var(--text-muted);
+            line-height: 1.6;
+        }
+
+        /* Animations */
+        @keyframes slideUp {
+            from { opacity: 0; transform: translateY(60px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+
+        @keyframes blink { 
+            0%, 100% { opacity: 1; } 
+            50% { opacity: 0.3; } 
+        }
+
+    </style>
+</head>
+<body>
+
+    <!-- Dynamic Background Layer -->
+    <canvas id="mesh-canvas"></canvas>
+    <div class="cursor-glow" id="cursor-glow"></div>
+
+    <div class="container">
+        <!-- Hero Section -->
+        <section class="hero">
+            <div class="status-badge">
+                <div class="status-dot"></div>
+                Zero-Trust Neural Architecture
+            </div>
+            <h1>WebGuard EDR Pro</h1>
+            <p>Experience the nexus of advanced heuristics and real-time OS-level telemetry. WebGuard deploys dynamic isolation protocols to neutralize zero-day vectors before they execute.</p>
+            <a href="/dashboard" class="cta-button">Initialize Neural Dashboard</a>
+        </section>
+
+        <!-- Features Showcase -->
+        <section class="features">
+            <div class="feature-card">
+                <div class="feature-icon">&#128374;</div> <!-- Radar/Scan Icon placeholder -->
+                <h3>Phishing Sandbox</h3>
+                <p>Execute suspicious endpoints in an isolated virtual matrix. Our engine uses deep domain nesting analysis and entropy checks to detect sophisticated phishing payloads.</p>
+            </div>
+            
+            <div class="feature-card">
+                <div class="feature-icon">&#9881;</div> <!-- Gear/AI Icon placeholder -->
+                <h3>Zero-Day AI Engine</h3>
+                <p>Integrated Scikit-Learn Random Forest models classify anomalous port traffic. The engine learns and iterates on novel threat signatures instantly.</p>
+            </div>
+            
+            <div class="feature-card">
+                <div class="feature-icon">&#128187;</div> <!-- Terminal Icon placeholder -->
+                <h3>OS-Level Telemetry</h3>
+                <p>Direct integration with the host OS. Monitors raw network sockets, intercepts malicious clipboard cryptojacking, and quarantines dangerous executables silently.</p>
+            </div>
+        </section>
+    </div>
+
+    <script>
+        // --- Interactive 3D Background (Wave Mesh) ---
+        const canvas = document.getElementById('mesh-canvas');
+        const ctx = canvas.getContext('2d');
+        const glow = document.getElementById('cursor-glow');
+        
+        let w, h;
+        let points = [];
+        const spacing = 80; // Grid spacing
+        let time = 0;
+        let mouseX = -1000;
+        let mouseY = -1000;
+
+        function resize() {
+            w = canvas.width = window.innerWidth;
+            h = canvas.height = window.innerHeight;
+            initPoints();
+        }
+
+        function initPoints() {
+            points = [];
+            const cols = Math.floor(w / spacing) + 2;
+            const rows = Math.floor(h / spacing) + 2;
+            
+            for (let y = 0; y < rows; y++) {
+                for (let x = 0; x < cols; x++) {
+                    points.push({
+                        ox: x * spacing - spacing/2,
+                        oy: y * spacing - spacing/2,
+                        x: 0, y: 0,
+                    });
+                }
+            }
+        }
+
+        window.addEventListener('resize', resize);
+        
+        window.addEventListener('mousemove', (e) => {
+            mouseX = e.clientX;
+            mouseY = e.clientY;
+            
+            // Move glow orb smoothly
+            requestAnimationFrame(() => {
+                glow.style.transform = `translate(calc(${mouseX}px - 50%), calc(${mouseY}px - 50%))`;
+            });
+        });
+
+        function animate() {
+            ctx.clearRect(0, 0, w, h);
+            time += 0.02;
+
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.03)';
+            ctx.lineWidth = 1;
+
+            const cols = Math.floor(w / spacing) + 2;
+
+            // Calculate physics first
+            points.forEach(p => {
+                // Wave Math
+                const waveX = Math.sin(p.ox * 0.01 + time) * 15;
+                const waveY = Math.cos(p.oy * 0.01 + time) * 15;
+                
+                // Mouse Interaction Math
+                let pushX = 0; let pushY = 0;
+                const dx = mouseX - p.ox;
+                const dy = mouseY - p.oy;
+                const dist = Math.sqrt(dx*dx + dy*dy);
+                
+                if (dist < 200) {
+                    const force = (200 - dist) / 200;
+                    pushX = -(dx / dist) * force * 30; // Repel
+                    pushY = -(dy / dist) * force * 30;
+                }
+
+                p.x = p.ox + waveX + pushX;
+                p.y = p.oy + waveY + pushY;
+            });
+
+            // Draw Mesh Horizontal Lines
+            ctx.beginPath();
+            for (let i = 0; i < points.length; i++) {
+                if (i % cols !== cols - 1) { // Connect to right neighbor
+                    ctx.moveTo(points[i].x, points[i].y);
+                    ctx.lineTo(points[i+1].x, points[i+1].y);
+                }
+                if (i + cols < points.length) { // Connect to bottom neighbor
+                    ctx.moveTo(points[i].x, points[i].y);
+                    ctx.lineTo(points[i+cols].x, points[i+cols].y);
+                }
+            }
+            ctx.stroke();
+
+            requestAnimationFrame(animate);
+        }
+
+        resize();
+        animate();
+
+        // --- 3D Magnetic Hover Effect on Feature Cards ---
+        const cards = document.querySelectorAll('.feature-card');
+        
+        cards.forEach(card => {
+            card.addEventListener('mousemove', e => {
+                const rect = card.getBoundingClientRect();
+                const x = e.clientX - rect.left;
+                const y = e.clientY - rect.top;
+                
+                // Spotlight coordinate
+                card.style.setProperty('--mouse-x', `${x}px`);
+                card.style.setProperty('--mouse-y', `${y}px`);
+
+                // 3D Tilt calculation
+                const centerX = rect.width / 2;
+                const centerY = rect.height / 2;
+                const rotateX = ((y - centerY) / centerY) * -10; // 10deg max tilt
+                const rotateY = ((x - centerX) / centerX) * 10;
+                
+                card.style.transform = `perspective(1200px) rotateX(${rotateX}deg) rotateY(${rotateY}deg) scale3d(1.03, 1.03, 1.03)`;
+                card.style.zIndex = "20";
+            });
+
+            card.addEventListener('mouseleave', () => {
+                card.style.transform = `perspective(1200px) rotateX(0deg) rotateY(0deg) scale3d(1, 1, 1)`;
+                card.style.zIndex = "10";
+            });
+        });
+
+    </script>
+</body>
+</html>

@@ -1,0 +1,1766 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WebGuard EDR Pro</title>
+    <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;600&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-color: #050505;
+            --glass-bg: rgba(10, 10, 12, 0.45);
+            --glass-border: rgba(255, 255, 255, 0.05);
+            --glass-highlight: rgba(255, 255, 255, 0.1);
+            --text-main: #f8fafc;
+            --text-muted: #94a3b8;
+            --accent-green: #10b981;
+            --accent-green-glow: rgba(16, 185, 129, 0.4);
+            --accent-red: #ef4444;
+            --accent-red-glow: rgba(239, 68, 68, 0.5);
+            --accent-cyan: #0ea5e9;
+            --accent-cyan-glow: rgba(14, 165, 233, 0.4);
+            --font-sans: 'Inter', sans-serif;
+            --font-mono: 'Fira Code', monospace;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            font-family: var(--font-sans);
+            min-height: 100vh;
+            overflow-x: hidden;
+            overflow-y: auto;
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            grid-template-rows: auto auto;
+            grid-gap: 24px;
+            padding: 28px;
+            position: relative;
+        }
+
+        /* Interactive Canvas Background */
+        #bg-canvas {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            z-index: 0;
+            pointer-events: none; /* Let events pass through to content */
+        }
+
+        /* Foreground Content Wrapper */
+        .content-layer {
+            position: relative;
+            z-index: 10;
+            display: flex;
+            flex-direction: column;
+            gap: 32px;
+        }
+
+        .card {
+            background: linear-gradient(135deg, rgba(20,20,25,0.6) 0%, rgba(10,10,12,0.4) 100%);
+            border: 1px solid var(--glass-border);
+            border-radius: 24px;
+            padding: 32px;
+            display: flex;
+            flex-direction: column;
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255,255,255,0.1);
+            position: relative;
+            overflow: hidden;
+            transform-style: preserve-3d;
+            perspective: 1000px;
+            transition: border-color 0.4s ease, box-shadow 0.4s ease;
+            animation: slideUp 0.8s cubic-bezier(0.16, 1, 0.3, 1) both;
+        }
+
+        /* Card Light Effect on Hover (done via JS) */
+        .card::before {
+            content: '';
+            position: absolute;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: radial-gradient(800px circle at var(--mouse-x, 0) var(--mouse-y, 0), rgba(255,255,255,0.06), transparent 40%);
+            z-index: 1;
+            pointer-events: none;
+            opacity: 0;
+            transition: opacity 0.3s;
+        }
+        .card:hover::before { opacity: 1; }
+        
+        .card-inner {
+            z-index: 2;
+            position: relative;
+            display: flex;
+            flex-direction: column;
+            height: 100%;
+            transform: translateZ(20px); /* 3D pop effect */
+        }
+
+        @keyframes slideUp {
+            from { opacity: 0; transform: translateY(40px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .content-layer:first-child .card:nth-child(1) { animation-delay: 0.1s; }
+        .content-layer:first-child .card:nth-child(2) { animation-delay: 0.2s; }
+        .content-layer:last-child .card:nth-child(1) { animation-delay: 0.3s; }
+        .content-layer:last-child .card:nth-child(2) { animation-delay: 0.4s; }
+
+        h2 {
+            font-size: 1.4rem;
+            font-weight: 600;
+            letter-spacing: -0.5px;
+            margin-bottom: 24px;
+            color: var(--text-main);
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        h2::before {
+            content: '';
+            display: inline-block;
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background-color: var(--accent-cyan);
+            box-shadow: 0 0 12px var(--accent-cyan), 0 0 24px var(--accent-cyan-glow);
+        }
+
+        p {
+            color: var(--text-muted);
+            line-height: 1.6;
+            font-weight: 400;
+            margin-bottom: 16px;
+        }
+
+        /* Radar Animation */
+        .radar-container {
+            position: relative;
+            width: 220px;
+            height: 220px;
+            margin: 20px auto 40px;
+            border-radius: 50%;
+            border: 1px solid rgba(14, 165, 233, 0.3);
+            box-shadow: 0 0 30px var(--accent-cyan-glow), inset 0 0 40px rgba(14, 165, 233, 0.1);
+            background: 
+                radial-gradient(circle, transparent 60%, rgba(14, 165, 233, 0.05) 100%),
+                repeating-radial-gradient(
+                    transparent,
+                    transparent 30px,
+                    rgba(14, 165, 233, 0.15) 31px,
+                    rgba(14, 165, 233, 0.15) 32px
+                );
+            overflow: hidden;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .radar-grid {
+            position: absolute;
+            width: 100%; height: 100%;
+            background: 
+                linear-gradient(90deg, transparent 49.5%, rgba(14, 165, 233, 0.4) 50%, transparent 50.5%),
+                linear-gradient(0deg, transparent 49.5%, rgba(14, 165, 233, 0.4) 50%, transparent 50.5%);
+        }
+
+        .radar-sweep {
+            position: absolute;
+            top: 50%; left: 50%;
+            width: 50%; height: 50%;
+            background: conic-gradient(from 0deg, transparent 70%, rgba(14, 165, 233, 0.8) 100%);
+            transform-origin: 0% 0%;
+            animation: sweep 3s linear infinite;
+        }
+
+        .radar-dot {
+            position: absolute;
+            width: 12px; height: 12px;
+            background-color: #fff;
+            border-radius: 50%;
+            box-shadow: 0 0 15px 4px #fff, 0 0 30px 8px var(--accent-cyan);
+            animation: pulse-dot 2s infinite;
+        }
+
+        @keyframes sweep {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        @keyframes pulse-dot {
+            0%, 100% { transform: scale(1); opacity: 1; }
+            50% { transform: scale(1.3); opacity: 0.8; }
+        }
+
+        /* Terminal */
+        .terminal {
+            background-color: rgba(0, 0, 0, 0.8);
+            border: 1px solid rgba(255,255,255,0.08);
+            border-radius: 12px;
+            padding: 20px;
+            font-family: var(--font-mono);
+            font-size: 0.9rem;
+            color: var(--accent-green);
+            flex: 1;
+            min-height: 0;
+            overflow-y: auto;
+            white-space: pre-wrap;
+            box-shadow: inset 0 4px 20px rgba(0,0,0,0.8);
+            position: relative;
+            scroll-behavior: smooth;
+        }
+        
+        /* Terminal Scanline effect */
+        .terminal::after {
+            content: " ";
+            display: block;
+            position: absolute;
+            top: 0;
+            left: 0;
+            bottom: 0;
+            right: 0;
+            background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%), linear-gradient(90deg, rgba(255, 0, 0, 0.06), rgba(0, 255, 0, 0.02), rgba(0, 0, 255, 0.06));
+            z-index: 2;
+            background-size: 100% 4px, 6px 100%;
+            pointer-events: none;
+        }
+
+        .terminal::-webkit-scrollbar { width: 8px; }
+        .terminal::-webkit-scrollbar-track { background: rgba(0,0,0,0.4); border-radius: 4px; }
+        .terminal::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 4px; }
+        .terminal::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.25); }
+
+        /* Terminal entry/exit animations */
+        @keyframes termEntry {
+            from { opacity: 0; transform: translateX(-12px); }
+            to   { opacity: 1; transform: translateX(0); }
+        }
+        @keyframes termExit {
+            from { opacity: 1; max-height: 30px; }
+            to   { opacity: 0; max-height: 0; padding: 0; margin: 0; }
+        }
+        
+        .terminal span { text-shadow: 0 0 8px rgba(16, 185, 129, 0.5); line-height: 1.5; display: block; }
+        .terminal span.warn { color: #f59e0b; text-shadow: 0 0 8px rgba(245, 158, 11, 0.5); }
+        .terminal span.danger { color: var(--accent-red); text-shadow: 0 0 8px var(--accent-red-glow); }
+
+        /* Forms & Buttons */
+        .input-group {
+            position: relative;
+            margin-bottom: 24px;
+        }
+
+        input[type="text"] {
+            width: 100%;
+            padding: 16px 20px;
+            background-color: rgba(0, 0, 0, 0.4);
+            border: 1px solid rgba(255,255,255,0.1);
+            color: var(--text-main);
+            font-family: var(--font-sans);
+            font-size: 1rem;
+            border-radius: 12px;
+            box-sizing: border-box;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            outline: none;
+            box-shadow: inset 0 2px 4px rgba(0,0,0,0.2);
+        }
+
+        input[type="text"]:focus {
+            border-color: var(--accent-cyan);
+            box-shadow: inset 0 2px 4px rgba(0,0,0,0.2), 0 0 0 4px rgba(14, 165, 233, 0.15);
+            background-color: rgba(0,0,0,0.6);
+        }
+
+        button {
+            position: relative;
+            background: linear-gradient(180deg, rgba(255,255,255,0.08) 0%, rgba(255,255,255,0.02) 100%);
+            color: var(--text-main);
+            border: 1px solid rgba(255,255,255,0.1);
+            padding: 14px 28px;
+            border-radius: 12px;
+            cursor: pointer;
+            font-family: var(--font-sans);
+            font-weight: 500;
+            font-size: 1rem;
+            transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+            overflow: hidden;
+            border-top: 1px solid rgba(255,255,255,0.2);
+        }
+        
+        button::before {
+            content: '';
+            position: absolute;
+            top: 0; left: -100%; width: 50%; height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(255,255,255,0.2), transparent);
+            transform: skewX(-20deg);
+            transition: 0.5s;
+        }
+
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 20px rgba(0,0,0,0.3);
+            border-color: rgba(255,255,255,0.3);
+            background: linear-gradient(180deg, rgba(255,255,255,0.12) 0%, rgba(255,255,255,0.05) 100%);
+        }
+        
+        button:hover::before {
+            left: 200%;
+        }
+        
+        button:active {
+            transform: translateY(1px);
+        }
+
+        button.primary {
+            background: linear-gradient(180deg, rgba(14, 165, 233, 0.3) 0%, rgba(14, 165, 233, 0.1) 100%);
+            border-color: rgba(14, 165, 233, 0.5);
+            color: #bae6fd;
+            border-top: 1px solid rgba(14, 165, 233, 0.6);
+        }
+
+        button.primary:hover {
+            background: linear-gradient(180deg, rgba(14, 165, 233, 0.4) 0%, rgba(14, 165, 233, 0.2) 100%);
+            box-shadow: 0 8px 20px rgba(14, 165, 233, 0.2), 0 0 15px rgba(14, 165, 233, 0.4);
+            border-color: rgba(14, 165, 233, 0.8);
+            color: #fff;
+        }
+
+        button.danger {
+            background: linear-gradient(180deg, rgba(239, 68, 68, 0.2) 0%, rgba(239, 68, 68, 0.05) 100%);
+            color: #fca5a5;
+            border-color: rgba(239, 68, 68, 0.4);
+            border-top: 1px solid rgba(239, 68, 68, 0.5);
+        }
+        
+        button.danger:hover {
+            background: linear-gradient(180deg, rgba(239, 68, 68, 0.3) 0%, rgba(239, 68, 68, 0.1) 100%);
+            border-color: rgba(239, 68, 68, 0.8);
+            box-shadow: 0 8px 20px rgba(239, 68, 68, 0.2), 0 0 20px rgba(239, 68, 68, 0.4);
+            color: #fff;
+        }
+
+        button.safe {
+            background: linear-gradient(180deg, rgba(16, 185, 129, 0.2) 0%, rgba(16, 185, 129, 0.05) 100%);
+            color: #6ee7b7;
+            border-color: rgba(16, 185, 129, 0.4);
+            border-top: 1px solid rgba(16, 185, 129, 0.5);
+        }
+
+        button.safe:hover {
+            background: linear-gradient(180deg, rgba(16, 185, 129, 0.3) 0%, rgba(16, 185, 129, 0.1) 100%);
+            border-color: rgba(16, 185, 129, 0.8);
+            box-shadow: 0 8px 20px rgba(16, 185, 129, 0.2), 0 0 20px rgba(16, 185, 129, 0.4);
+            color: #fff;
+        }
+
+        /* Mock triggers section */
+        .triggers {
+            display: flex;
+            gap: 16px;
+            margin-top: 8px;
+        }
+
+        /* Alert Overlay */
+        #alert-overlay {
+            position: fixed;
+            bottom: 32px; right: 32px;
+            width: auto; height: auto;
+            z-index: 1000;
+            display: none;
+            justify-content: flex-end;
+            align-items: flex-end;
+            flex-direction: column;
+            animation: fadeIn 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+            pointer-events: none;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .alert-box {
+            background: linear-gradient(135deg, rgba(30,30,30,0.95), rgba(15,15,15,0.95));
+            border: 1px solid rgba(239, 68, 68, 0.6);
+            border-radius: 20px;
+            padding: 28px 32px;
+            text-align: left;
+            max-width: 560px;
+            max-height: 85vh;
+            overflow-y: auto;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.8), 0 0 40px rgba(239, 68, 68, 0.3), inset 0 1px 0 rgba(255,255,255,0.1);
+            animation: alertPop 0.6s cubic-bezier(0.34, 1.56, 0.64, 1);
+            position: relative;
+            pointer-events: auto;
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+        }
+        
+        .alert-box::after {
+            content: '';
+            position: absolute;
+            top: 0; left: 0; right: 0; height: 4px;
+            background: var(--accent-red);
+            box-shadow: 0 0 20px var(--accent-red);
+            animation: pulse-top-line 1.5s infinite;
+        }
+
+        @keyframes alertPop {
+            from { transform: scale(0.8) translateY(20px); opacity: 0; }
+            to { transform: scale(1) translateY(0); opacity: 1; }
+        }
+        
+        @keyframes pulse-top-line {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        .alert-box h1 {
+            margin-top: 0;
+            font-size: 1.8rem;
+            color: var(--accent-red);
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            text-shadow: 0 0 15px var(--accent-red-glow);
+            margin-bottom: 8px;
+            font-weight: 700;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+        
+        .alert-box h1::before {
+            content: '⚠️';
+            font-size: 1.5rem;
+        }
+        
+        .alert-subtitle {
+            color: #fca5a5;
+            margin-bottom: 24px;
+            font-weight: 500;
+            font-size: 1rem;
+            letter-spacing: 0.5px;
+        }
+
+        .alert-details {
+            font-family: var(--font-mono);
+            color: var(--text-main);
+            margin: 16px 0;
+            text-align: left;
+            background: rgba(0, 0, 0, 0.6);
+            padding: 20px;
+            border-radius: 12px;
+            border: 1px solid rgba(255,255,255,0.08);
+            line-height: 1.8;
+            font-size: 0.9rem;
+            box-shadow: inset 0 4px 15px rgba(0,0,0,0.5);
+        }
+        
+        .alert-details strong {
+            color: var(--text-muted);
+            font-weight: normal;
+            width: 160px;
+            display: inline-block;
+        }
+
+        .alert-actions {
+            display: flex;
+            justify-content: flex-start;
+            gap: 16px;
+            margin-top: 24px;
+        }
+        
+        .alert-actions button {
+            font-size: 1rem;
+            padding: 12px 24px;
+            letter-spacing: 1px;
+            text-transform: uppercase;
+            font-weight: 600;
+        }
+        
+        #sandbox-result {
+            margin-top: 24px;
+            font-family: var(--font-mono);
+            padding: 20px;
+            border-radius: 12px;
+            background: rgba(0, 0, 0, 0.5);
+            border: 1px solid rgba(255,255,255,0.08);
+            display: none;
+            font-size: 0.95rem;
+            animation: slideDown 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+            transform-origin: top;
+        }
+        
+        @keyframes slideDown {
+            from { opacity: 0; transform: scaleY(0.9) translateY(-10px); }
+            to { opacity: 1; transform: scaleY(1) translateY(0); }
+        }
+        
+        /* Status Indicator */
+        .status-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 12px;
+            background: rgba(16, 185, 129, 0.1);
+            padding: 8px 18px;
+            border-radius: 30px;
+            font-size: 0.9rem;
+            color: var(--accent-green);
+            border: 1px solid rgba(16, 185, 129, 0.3);
+            font-weight: 600;
+            letter-spacing: 1px;
+            box-shadow: 0 0 15px rgba(16, 185, 129, 0.1);
+        }
+        
+        .status-dot {
+            width: 10px;
+            height: 10px;
+            background-color: #fff;
+            border-radius: 50%;
+            box-shadow: 0 0 10px #fff, 0 0 20px var(--accent-green);
+            animation: blink 2s infinite ease-in-out;
+        }
+        
+        @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
+
+        /* ── Intelligence Panel (bottom full-width) ── */
+        .intel-panel {
+            grid-column: 1 / -1;
+            display: flex;
+            flex-direction: column;
+            max-height: 280px;
+        }
+
+        .tab-bar {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 16px;
+            flex-shrink: 0;
+        }
+
+        .tab-btn {
+            padding: 8px 18px;
+            border-radius: 8px;
+            font-size: 0.8rem;
+            font-weight: 600;
+            letter-spacing: 0.5px;
+            cursor: pointer;
+            border: 1px solid rgba(255,255,255,0.1);
+            background: rgba(255,255,255,0.04);
+            color: var(--text-muted);
+            transition: all 0.25s;
+            text-transform: uppercase;
+        }
+        .tab-btn.active {
+            background: rgba(14,165,233,0.15);
+            border-color: rgba(14,165,233,0.5);
+            color: var(--accent-cyan);
+            box-shadow: 0 0 12px rgba(14,165,233,0.2);
+        }
+        .tab-btn:hover:not(.active) { color: var(--text-main); background: rgba(255,255,255,0.08); }
+
+        .tab-pane { display: none; flex: 1; overflow-y: auto; }
+        .tab-pane.active { display: block; }
+        .tab-pane::-webkit-scrollbar { width: 6px; }
+        .tab-pane::-webkit-scrollbar-track { background: rgba(0,0,0,0.3); border-radius: 3px; }
+        .tab-pane::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 3px; }
+
+        /* ── Geo / Registry / Quarantine feed entries ── */
+        .feed-entry {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 8px 14px;
+            border-radius: 8px;
+            margin-bottom: 6px;
+            font-size: 0.82rem;
+            background: rgba(255,255,255,0.03);
+            border: 1px solid rgba(255,255,255,0.05);
+            transition: background 0.2s;
+            animation: slideUp 0.3s ease both;
+        }
+        .feed-entry:hover { background: rgba(255,255,255,0.07); }
+        .feed-entry .badge {
+            font-size: 0.7rem;
+            font-weight: 700;
+            padding: 2px 8px;
+            border-radius: 4px;
+            flex-shrink: 0;
+            letter-spacing: 0.5px;
+        }
+        .badge.blocked { background: rgba(239,68,68,0.2); color: #f87171; border: 1px solid rgba(239,68,68,0.3); }
+        .badge.safe    { background: rgba(16,185,129,0.2); color: #6ee7b7; border: 1px solid rgba(16,185,129,0.3); }
+        .badge.warn    { background: rgba(245,158,11,0.2); color: #fcd34d; border: 1px solid rgba(245,158,11,0.3); }
+        .feed-entry .flag { font-size: 1.1rem; }
+        .feed-entry .meta { color: var(--text-muted); font-size: 0.75rem; margin-left: auto; flex-shrink: 0; }
+        .feed-empty { color: var(--text-muted); font-size: 0.85rem; padding: 12px; text-align: center; }
+
+        /* ── World Map (Geo-IP tab) ── */
+        #world-map-wrap {
+            position: relative;
+            width: 100%;
+            height: 160px;
+            background: rgba(0,0,0,0.4);
+            border-radius: 12px;
+            overflow: hidden;
+            border: 1px solid rgba(14,165,233,0.15);
+            flex-shrink: 0;
+            margin-bottom: 10px;
+        }
+        #world-map-svg { width: 100%; height: 100%; opacity: 0.6; }
+        .map-dot {
+            position: absolute;
+            width: 10px; height: 10px;
+            border-radius: 50%;
+            transform: translate(-50%, -50%);
+            animation: map-pulse 2s infinite;
+        }
+        .map-dot.threat { background: #ef4444; box-shadow: 0 0 10px #ef4444; }
+        .map-dot.safe   { background: #10b981; box-shadow: 0 0 10px #10b981; }
+        @keyframes map-pulse {
+            0%,100% { transform: translate(-50%,-50%) scale(1); opacity:1; }
+            50%      { transform: translate(-50%,-50%) scale(1.6); opacity:0.5; }
+        }
+
+        /* ── LLM Report inside alert ── */
+        .llm-report-box {
+            margin-top: 14px;
+            padding: 14px 18px;
+            border-radius: 10px;
+            background: rgba(14,165,233,0.07);
+            border: 1px solid rgba(14,165,233,0.25);
+            font-size: 0.88rem;
+            line-height: 1.65;
+            color: #bae6fd;
+        }
+        .llm-report-label {
+            font-size: 0.72rem;
+            font-weight: 700;
+            letter-spacing: 1.5px;
+            color: var(--accent-cyan);
+            text-transform: uppercase;
+            margin-bottom: 6px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .llm-loading {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            color: var(--text-muted);
+            font-size: 0.82rem;
+        }
+        .llm-spinner {
+            width: 12px; height: 12px;
+            border: 2px solid rgba(14,165,233,0.3);
+            border-top-color: var(--accent-cyan);
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        @keyframes typewriter { from { opacity:0; } to { opacity:1; } }
+        .llm-char { animation: typewriter 0.02s ease both; }
+
+        /* ── AI trigger badges in alert ── */
+        .trigger-tags { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+        .trigger-tag {
+            font-size: 0.72rem;
+            padding: 3px 10px;
+            border-radius: 20px;
+            background: rgba(239,68,68,0.12);
+            border: 1px solid rgba(239,68,68,0.25);
+            color: #fca5a5;
+        }
+
+        /* ── Spam / Scam Lookup Module ── */
+        .spam-card {
+            flex-grow: 1;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .spam-input-row {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 14px;
+        }
+
+        .spam-input-row input {
+            flex: 1;
+            padding: 14px 18px;
+            font-size: 0.92rem;
+        }
+
+        .spam-input-row button {
+            padding: 14px 22px;
+            font-size: 0.85rem;
+            letter-spacing: 0.5px;
+            flex-shrink: 0;
+        }
+
+        .spam-type-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 0.75rem;
+            font-weight: 700;
+            letter-spacing: 1px;
+            padding: 3px 10px;
+            border-radius: 20px;
+            margin-bottom: 14px;
+            transition: all 0.3s;
+        }
+        .spam-type-email { background: rgba(14,165,233,0.12); color: var(--accent-cyan); border: 1px solid rgba(14,165,233,0.3); }
+        .spam-type-phone { background: rgba(16,185,129,0.12); color: var(--accent-green); border: 1px solid rgba(16,185,129,0.3); }
+        .spam-type-unknown { background: rgba(255,255,255,0.05); color: var(--text-muted); border: 1px solid rgba(255,255,255,0.1); }
+
+        #spam-result {
+            display: none;
+            flex-direction: column;
+            gap: 14px;
+            animation: slideDown 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+
+        .spam-score-row {
+            display: flex;
+            align-items: center;
+            gap: 20px;
+        }
+
+        .spam-gauge-wrap {
+            position: relative;
+            width: 96px;
+            height: 96px;
+            flex-shrink: 0;
+        }
+
+        .spam-gauge-wrap svg { width: 100%; height: 100%; }
+
+        .spam-gauge-pct {
+            position: absolute;
+            inset: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .spam-gauge-num {
+            font-size: 1.4rem;
+            font-weight: 700;
+            line-height: 1;
+            font-family: var(--font-mono);
+        }
+
+        .spam-gauge-label {
+            font-size: 0.6rem;
+            letter-spacing: 1px;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            margin-top: 2px;
+        }
+
+        .spam-verdict-block { flex: 1; }
+
+        .spam-verdict {
+            font-size: 1.5rem;
+            font-weight: 800;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+            text-shadow: 0 0 20px currentColor;
+            margin-bottom: 6px;
+        }
+
+        .spam-verdict-sub {
+            font-size: 0.8rem;
+            color: var(--text-muted);
+        }
+
+        .spam-flags {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            max-height: 130px;
+            overflow-y: auto;
+        }
+
+        .spam-flags li {
+            display: flex;
+            align-items: flex-start;
+            gap: 8px;
+            font-size: 0.82rem;
+            padding: 7px 12px;
+            background: rgba(239,68,68,0.06);
+            border: 1px solid rgba(239,68,68,0.15);
+            border-radius: 8px;
+            color: var(--text-main);
+            line-height: 1.4;
+        }
+
+        .spam-flags li.clean {
+            background: rgba(16,185,129,0.06);
+            border-color: rgba(16,185,129,0.2);
+        }
+
+        .spam-flags li::before {
+            content: '⚑';
+            font-size: 0.7rem;
+            color: #ef4444;
+            margin-top: 2px;
+            flex-shrink: 0;
+        }
+
+        .spam-flags li.clean::before { content: '✓'; color: var(--accent-green); }
+
+        .spam-details {
+            font-size: 0.78rem;
+            color: var(--text-muted);
+            padding: 8px 12px;
+            background: rgba(0,0,0,0.3);
+            border-radius: 8px;
+            border: 1px solid rgba(255,255,255,0.05);
+            font-family: var(--font-mono);
+            line-height: 1.6;
+        }
+
+        .spam-history {
+            margin-top: 10px;
+            border-top: 1px solid rgba(255,255,255,0.06);
+            padding-top: 10px;
+        }
+
+        .spam-history-title {
+            font-size: 0.7rem;
+            font-weight: 700;
+            letter-spacing: 1px;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            margin-bottom: 8px;
+        }
+
+        .spam-history-items {
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+            max-height: 80px;
+            overflow-y: auto;
+        }
+
+        .spam-history-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 0.75rem;
+            padding: 5px 10px;
+            border-radius: 6px;
+            background: rgba(255,255,255,0.03);
+            border: 1px solid rgba(255,255,255,0.05);
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        .spam-history-item:hover { background: rgba(255,255,255,0.07); }
+
+        .spam-history-icon { font-size: 0.9rem; flex-shrink: 0; }
+
+        .spam-history-text { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-muted); }
+
+        .spam-history-verdict {
+            font-size: 0.7rem;
+            font-weight: 700;
+            letter-spacing: 0.5px;
+            flex-shrink: 0;
+        }
+
+        .spam-loading {
+            display: none;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            padding: 20px;
+            color: var(--text-muted);
+            font-size: 0.9rem;
+        }
+
+        .spam-spinner {
+            width: 18px; height: 18px;
+            border: 2px solid rgba(14,165,233,0.2);
+            border-top-color: var(--accent-cyan);
+            border-radius: 50%;
+            animation: spin 0.7s linear infinite;
+        }
+
+    </style>
+</head>
+<body>
+    
+    <!-- Interactive Background -->
+    <canvas id="bg-canvas"></canvas>
+
+    <!-- Navigation -->
+    <a href="/" style="position: absolute; top: 20px; right: 32px; z-index: 100; text-decoration: none; color: var(--text-muted); font-size: 0.9rem; font-weight: 600; display: flex; align-items: center; gap: 8px; transition: all 0.3s; padding: 10px 20px; background: rgba(0,0,0,0.6); border-radius: 12px; border: 1px solid rgba(255,255,255,0.1); backdrop-filter: blur(10px); box-shadow: 0 4px 15px rgba(0,0,0,0.5);" onmouseover="this.style.color='#fff'; this.style.borderColor='rgba(14, 165, 233, 0.5)';" onmouseout="this.style.color='var(--text-muted)'; this.style.borderColor='rgba(255,255,255,0.1)';">
+        &#8592; Return to Base
+    </a>
+
+    <!-- Left Column: Status & Realtime -->
+    <div class="content-layer">
+        <div class="card" style="align-items: center; text-align: center;">
+            <div class="card-inner">
+                <h2>System Radar</h2>
+                <div class="radar-container">
+                    <div class="radar-grid"></div>
+                    <div class="radar-dot"></div>
+                    <div class="radar-sweep"></div>
+                </div>
+                <div class="status-badge">
+                    <div class="status-dot"></div>
+                    ENGINE SECURE & ONLINE
+                </div>
+            </div>
+        </div>
+
+        <div class="card" style="flex: 1; min-height: 0; max-height: 420px; overflow: hidden;">
+            <div class="card-inner" style="min-height: 0; overflow: hidden;">
+                <h2>Live Telemetry</h2>
+                <div id="terminal" class="terminal">> System initialized.<br>> ML Heuristics engine loaded.<br>> Neural net mapping active.<br></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Right Column: Tools & Triggers -->
+    <div class="content-layer">
+        <div class="card">
+            <div class="card-inner">
+                <h2>Phishing Sandbox</h2>
+                <p>Deploy heuristic engines and entropy analysis to validate suspicious endpoints in a secure container.</p>
+                <div class="input-group">
+                    <input type="text" id="sandbox-url" placeholder="https://example.com/login" value="http://192.168.1.5/verify_account.php" autocomplete="off" spellcheck="false">
+                </div>
+                <div>
+                    <button class="primary" onclick="analyzeURL()">Execute Analysis</button>
+                </div>
+                <div id="sandbox-result"></div>
+            </div>
+        </div>
+
+        <div class="card spam-card">
+            <div class="card-inner" style="height:100%;">
+                <h2>Spam & Scam Lookup</h2>
+                <p style="margin-bottom:12px;">Enter an <b style="color:var(--accent-cyan)">email address</b> or <b style="color:var(--accent-green)">phone number</b> to run a multi-layer heuristic threat analysis and detect spam, scam, or phishing origin.</p>
+
+                <div class="spam-input-row">
+                    <input type="text" id="spam-query" placeholder="e.g. user@mailinator.com or +1 876 555 0198"
+                        autocomplete="off" spellcheck="false"
+                        oninput="updateSpamTypeBadge(this.value)"
+                        onkeydown="if(event.key==='Enter') runSpamLookup()"
+                    >
+                    <button class="primary" id="spam-btn" onclick="runSpamLookup()">Analyze</button>
+                </div>
+
+                <div id="spam-type-badge" class="spam-type-badge spam-type-unknown">📥 AUTO-DETECT</div>
+
+                <div class="spam-loading" id="spam-loading">
+                    <div class="spam-spinner"></div>
+                    Running threat analysis...
+                </div>
+
+                <div id="spam-result">
+                    <div class="spam-score-row">
+                        <div class="spam-gauge-wrap">
+                            <svg viewBox="0 0 100 100">
+                                <circle cx="50" cy="50" r="40" fill="none" stroke="rgba(255,255,255,0.06)" stroke-width="10"/>
+                                <circle id="spam-gauge-arc" cx="50" cy="50" r="40" fill="none" stroke="#ef4444"
+                                    stroke-width="10" stroke-linecap="round"
+                                    stroke-dasharray="251.3" stroke-dashoffset="251.3"
+                                    transform="rotate(-90 50 50)"
+                                    style="transition: stroke-dashoffset 0.8s cubic-bezier(0.16,1,0.3,1), stroke 0.5s ease;"/>
+                            </svg>
+                            <div class="spam-gauge-pct">
+                                <div class="spam-gauge-num" id="spam-gauge-num" style="color:#ef4444">0%</div>
+                                <div class="spam-gauge-label">RISK</div>
+                            </div>
+                        </div>
+                        <div class="spam-verdict-block">
+                            <div class="spam-verdict" id="spam-verdict-text" style="color:#ef4444;">---</div>
+                            <div class="spam-verdict-sub" id="spam-verdict-sub">Awaiting analysis...</div>
+                        </div>
+                    </div>
+
+                    <ul class="spam-flags" id="spam-flags-list"></ul>
+
+                    <div class="spam-details" id="spam-details-box" style="display:none;"></div>
+                </div>
+
+                <div class="spam-history" id="spam-history" style="display:none;">
+                    <div class="spam-history-title">⏱ Scan History</div>
+                    <div class="spam-history-items" id="spam-history-items"></div>
+                </div>
+
+                <div style="margin-top:auto;padding-top:16px;border-top:1px solid rgba(255,255,255,0.05);display:flex;gap:10px;align-items:center;">
+                    <button onclick="sendMockTrigger('Network RAT', 4444, 98.5, 1337)" class="danger" style="font-size:0.78rem;padding:8px 14px;">Inject RAT</button>
+                    <button onclick="sendMockTrigger('Malicious Download', 'N/A', 100, 'malware.exe')" class="danger" style="font-size:0.78rem;padding:8px 14px;">Drop Payload</button>
+                    <span style="font-size:0.72rem;color:var(--text-muted);flex:1;text-align:right;">Pen-Test Tools</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Alert Overlay -->
+    <div id="alert-overlay">
+        <div class="alert-box">
+            <h1>Threat Detected</h1>
+            <div class="alert-subtitle">CRITICAL ANOMALY: Automated response requires operator oversight</div>
+            <div class="alert-details" id="alert-details">
+                <!-- Interpolated dynamically -->
+            </div>
+            <div class="trigger-tags" id="alert-triggers"></div>
+            <div id="llm-report-box" class="llm-report-box" style="display:none">
+                <div class="llm-report-label">🤖 AI Analyst Report</div>
+                <div id="llm-report-content"></div>
+            </div>
+            <div class="alert-actions">
+                <button class="safe" onclick="handleAlertAction('allow')">Add to Whitelist</button>
+                <button class="danger" onclick="handleAlertAction('terminate')">Terminate Process</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Intelligence Panel (full-width bottom row) -->
+    <div class="card intel-panel">
+        <div class="card-inner" style="height:100%;display:flex;flex-direction:column;">
+            <div style="display:flex;align-items:center;justify-content:space-between;flex-shrink:0;">
+                <h2 style="margin-bottom:0;">Threat Intelligence</h2>
+                <span id="llm-status-badge" style="font-size:0.72rem;padding:4px 12px;border-radius:20px;background:rgba(16,185,129,0.1);border:1px solid rgba(16,185,129,0.4);color:#6ee7b7;font-weight:600;letter-spacing:1px;">🤖 AI ENGINE ONLINE</span>
+            </div>
+            <div class="tab-bar" style="margin-top:14px;">
+                <button id="tabBtn-geo" class="tab-btn active" onclick="switchTab('geo')">🌍 Geo-IP Map</button>
+                <button id="tabBtn-registry" class="tab-btn" onclick="switchTab('registry')">🛡 Registry Guard</button>
+                <button id="tabBtn-quarantine" class="tab-btn" onclick="switchTab('quarantine')">🔒 Quarantine</button>
+            </div>
+            <!-- Geo-IP Tab -->
+            <div id="tab-geo" class="tab-pane active" style="display:flex;flex-direction:column;flex:1;overflow:hidden;">
+                <div id="world-map-wrap">
+                    <svg id="world-map-svg" viewBox="0 0 1000 500" preserveAspectRatio="xMidYMid meet">
+                        <rect width="1000" height="500" fill="#050a12"/>
+                        <g fill="rgba(14,165,233,0.15)" stroke="rgba(14,165,233,0.3)" stroke-width="1">
+                          <path d="M130,60 L200,55 L240,80 L255,120 L230,160 L210,200 L185,240 L160,270 L140,260 L130,220 L115,180 L100,140 L110,100 Z"/>
+                          <path d="M195,270 L230,260 L255,290 L260,340 L250,390 L230,430 L205,450 L185,420 L175,380 L170,330 L180,290 Z"/>
+                          <path d="M430,50 L490,45 L510,70 L500,110 L470,125 L445,115 L425,95 L420,70 Z"/>
+                          <path d="M430,140 L490,130 L525,160 L530,220 L520,290 L500,340 L470,360 L440,340 L420,280 L415,210 L420,160 Z"/>
+                          <path d="M510,40 L650,30 L780,55 L820,90 L800,150 L750,190 L680,210 L620,200 L570,170 L530,140 L505,100 Z"/>
+                          <path d="M720,280 L790,270 L820,300 L810,340 L770,355 L730,335 L715,305 Z"/>
+                        </g>
+                        <line x1="500" y1="0" x2="500" y2="500" stroke="rgba(14,165,233,0.07)" stroke-width="1"/>
+                        <line x1="0" y1="250" x2="1000" y2="250" stroke="rgba(14,165,233,0.07)" stroke-width="1"/>
+                    </svg>
+                    <div id="map-dots"></div>
+                </div>
+                <div id="geo-feed-list" style="flex:1;overflow-y:auto;"><div class="feed-empty">Monitoring outbound connections — geo dots appear when destinations resolve.</div></div>
+            </div>
+            <!-- Registry Tab -->
+            <div id="tab-registry" class="tab-pane" style="overflow-y:auto;flex:1;">
+                <div id="registry-feed-list"><div class="feed-empty">✅ All startup registry keys are clean. Watching HKCU &amp; HKLM Run keys.</div></div>
+            </div>
+            <!-- Quarantine Tab -->
+            <div id="tab-quarantine" class="tab-pane" style="overflow-y:auto;flex:1;">
+                <div id="quarantine-feed-list"><div class="feed-empty">🔒 Quarantine vault empty. SHA-256 hashing active on Downloads.</div></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // --- 1. Background Canvas Animation (Particles/Vanguard Theme) ---
+        const canvas = document.getElementById('bg-canvas');
+        const ctx = canvas.getContext('2d');
+        let width, height;
+        let particles = [];
+        let mouse = { x: -1000, y: -1000 };
+
+        function initCanvas() {
+            width = canvas.width = window.innerWidth;
+            height = canvas.height = window.innerHeight;
+            particles = [];
+            const count = Math.min(Math.floor((width * height) / 10000), 150);
+            for (let i = 0; i < count; i++) {
+                particles.push({
+                    x: Math.random() * width,
+                    y: Math.random() * height,
+                    vx: (Math.random() - 0.5) * 1.5,
+                    vy: (Math.random() - 0.5) * 1.5,
+                    size: Math.random() * 2 + 0.5
+                });
+            }
+        }
+
+        window.addEventListener('resize', initCanvas);
+        window.addEventListener('mousemove', (e) => {
+            mouse.x = e.clientX;
+            mouse.y = e.clientY;
+        });
+
+        // Mouse leave
+        window.addEventListener('mouseout', () => {
+            mouse.x = -1000;
+            mouse.y = -1000;
+        });
+
+        function animateCanvas() {
+            ctx.clearRect(0, 0, width, height);
+            
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
+            ctx.lineWidth = 0.5;
+
+            particles.forEach((p, index) => {
+                p.x += p.vx;
+                p.y += p.vy;
+
+                // Bounce
+                if (p.x < 0 || p.x > width) p.vx *= -1;
+                if (p.y < 0 || p.y > height) p.vy *= -1;
+
+                // Interaction with mouse
+                const dx = mouse.x - p.x;
+                const dy = mouse.y - p.y;
+                const distance = Math.sqrt(dx * dx + dy * dy);
+                if (distance < 150) {
+                    p.x -= dx * 0.05;
+                    p.y -= dy * 0.05;
+                }
+
+                // Draw Particle
+                ctx.beginPath();
+                ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+                ctx.fill();
+
+                // Draw Lines
+                for (let j = index + 1; j < particles.length; j++) {
+                    const p2 = particles[j];
+                    const ldx = p.x - p2.x;
+                    const ldy = p.y - p2.y;
+                    const lDist = Math.sqrt(ldx * ldx + ldy * ldy);
+
+                    if (lDist < 120) {
+                        ctx.beginPath();
+                        ctx.strokeStyle = `rgba(14, 165, 233, ${1 - lDist/120})`;
+                        ctx.moveTo(p.x, p.y);
+                        ctx.lineTo(p2.x, p2.y);
+                        ctx.stroke();
+                    }
+                }
+            });
+
+            requestAnimationFrame(animateCanvas);
+        }
+
+        initCanvas();
+        animateCanvas();
+
+        // --- 2. 3D Tilt & Magnetic Effects for Cards ---
+        const cards = document.querySelectorAll('.card');
+        cards.forEach(card => {
+            card.addEventListener('mousemove', e => {
+                const rect = card.getBoundingClientRect();
+                const x = e.clientX - rect.left;
+                const y = e.clientY - rect.top;
+                
+                // Light effect coordinates
+                card.style.setProperty('--mouse-x', `${x}px`);
+                card.style.setProperty('--mouse-y', `${y}px`);
+
+                // 3D Tilt
+                const centerX = rect.width / 2;
+                const centerY = rect.height / 2;
+                const rotateX = ((y - centerY) / centerY) * -5; // Max 5deg tilt
+                const rotateY = ((x - centerX) / centerX) * 5;
+                
+                card.style.transform = `perspective(1000px) rotateX(${rotateX}deg) rotateY(${rotateY}deg) scale3d(1.02, 1.02, 1.02)`;
+                card.style.zIndex = "100";
+            });
+
+            card.addEventListener('mouseleave', () => {
+                card.style.transform = `perspective(1000px) rotateX(0deg) rotateY(0deg) scale3d(1, 1, 1)`;
+                card.style.zIndex = "1";
+            });
+        });
+
+        // --- 3. EDR Logic & Wiring ---
+        const terminal = document.getElementById('terminal');
+        let currentAlertData = null;
+
+        const MAX_TERMINAL_LINES = 50;
+
+        function logTerminal(msg, type='info') {
+            const time = new Date().toLocaleTimeString('en-US', { hour12: false });
+            let span = document.createElement('span');
+            if (type === 'warn') span.className = 'warn';
+            if (type === 'danger') span.className = 'danger';
+            span.style.animation = 'termEntry 0.3s ease both';
+            span.innerText = `[${time}] ${msg}\n`;
+            terminal.appendChild(span);
+            // Wipe oldest entries to keep the terminal compact
+            while (terminal.childElementCount > MAX_TERMINAL_LINES) {
+                const old = terminal.firstElementChild;
+                if (old) {
+                    old.style.animation = 'termExit 0.2s ease forwards';
+                    old.addEventListener('animationend', () => old.remove(), { once: true });
+                    // Fallback removal in case animationend doesn't fire
+                    setTimeout(() => { if (old.parentNode) old.remove(); }, 250);
+                }
+            }
+            terminal.scrollTop = terminal.scrollHeight;
+        }
+
+        logTerminal('Neural Server connection established. Engine Online.');
+
+        // Live Telemetry loop
+        setInterval(async () => {
+            try {
+                const res = await fetch('/api/stats');
+                const stats = await res.json();
+                logTerminal(`Metrics: CPU ${stats.cpu}% | RAM ${stats.ram}%`);
+            } catch (e) { }
+        }, 3000);
+
+        // Alert Fast-Polling loop
+        setInterval(async () => {
+            try {
+                const res = await fetch('/api/alerts_and_logs');
+                const data = await res.json();
+                
+                data.logs.forEach(log => {
+                    logTerminal(log.msg, log.level);
+                });
+                
+                if (data.alerts && data.alerts.length > 0 && !currentAlertData) {
+                    const alert = data.alerts[0];
+                    if (alert.type === 'LLM_UPDATE') {
+                        showLLMReport(alert.report);
+                    } else {
+                        logTerminal(`CRITICAL: ${alert.type} detected`, 'danger');
+                        triggerMockAlert(alert);
+                    }
+                }
+            } catch (e) { }
+        }, 1000);
+
+        function analyzeURL() {
+            const urlInput = document.getElementById('sandbox-url').value;
+            const resultDiv = document.getElementById('sandbox-result');
+            resultDiv.style.display = 'block';
+            
+            if (!urlInput) {
+                resultDiv.innerHTML = "<span style='color: var(--accent-red)'>[!] FATAL: Target URL parameter required.</span>";
+                return;
+            }
+
+            let score = 0;
+            let flags = [];
+
+            const ipRegex = /\b(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\b/;
+            if (ipRegex.test(urlInput)) { score += 40; flags.push("Uses Raw IP Address Masking"); }
+            if (urlInput.startsWith("http://")) { score += 20; flags.push("Unencrypted HTTP Delivery"); }
+            
+            const suspiciousKeywords = ['login', 'verify', 'update', 'secure', 'account', 'banking', 'auth'];
+            let foundKeywords = suspiciousKeywords.filter(kw => urlInput.toLowerCase().includes(kw));
+            if (foundKeywords.length > 0) { score += 30; flags.push(`Suspicious Payload Keywords: ${foundKeywords.join(', ')}`); }
+
+            try {
+                let urlObj = new URL(urlInput.startsWith('http') ? urlInput : 'http://' + urlInput);
+                let parts = urlObj.hostname.split('.');
+                if (parts.length > 3) { score += 20; flags.push(`Deep Subdomain Nesting (${parts.length} levels)`); }
+            } catch(e) {}
+
+            score = Math.min(score, 100);
+            
+            let color = 'var(--accent-green)';
+            if (score > 40) color = '#f59e0b';
+            if (score > 70) color = 'var(--accent-red)';
+
+            let safeScore = 100 - score;
+            resultDiv.innerHTML = `
+                <div style="font-size: 1.2rem; margin-bottom: 8px; color: ${color}; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; text-shadow: 0 0 10px ${color}">
+                    ${score}% Chance of Phishing Payload
+                </div>
+                <div style="font-size: 0.95rem; margin-bottom: 20px; color: var(--accent-green);">
+                    ${safeScore}% Probability Matrix Clear
+                </div>
+                <div style="color: var(--text-muted); margin-bottom: 8px; font-weight: 600;">Detected Anomaly Flags:</div>
+                <ul style="margin: 0; padding-left: 24px; color: var(--text-main); list-style-type: square;">
+                    ${flags.length > 0 ? flags.map(f => `<li style="margin-bottom: 4px">${f}</li>`).join('') : '<li style="color: var(--accent-green)">No overt heuristic anomalies detected.</li>'}
+                </ul>
+            `;
+        }
+
+        function triggerMockAlert(alert) {
+            // Support both object (new) and legacy positional args
+            if (typeof alert !== 'object') {
+                alert = { type: arguments[0], port: arguments[1], score: arguments[2], pid: arguments[3] };
+            }
+            currentAlertData = alert;
+            const details = document.getElementById('alert-details');
+            const geo = alert.geo || {};
+            const geoStr = geo.country
+                ? `<br><strong>Origin:</strong> <span style="color:#f59e0b">${geo.city || ''}, ${geo.country} ${getFlagEmoji(geo.countryCode)}</span>`
+                : '';
+            details.innerHTML = `
+                <strong>Threat Signature:</strong> <span style="color:var(--text-main)">${alert.type}</span><br>
+                <strong>Target:</strong> <span style="color:var(--accent-cyan)">${alert.port}</span><br>
+                <strong>Process:</strong> <span style="color:var(--text-main)">${alert.process_name || 'Unknown'}</span><br>
+                <strong>AI Confidence:</strong> <span style="color:var(--accent-red);font-weight:700">${alert.score}%</span><br>
+                <strong>PID:</strong> <span style="color:var(--text-main)">${alert.pid || 'Unknown'}</span>${geoStr}
+                ${alert.hash ? `<br><strong>SHA-256:</strong> <span style="color:var(--text-muted);font-size:0.8rem">${alert.hash}</span>` : ''}
+            `;
+            // Trigger tags
+            const tagsEl = document.getElementById('alert-triggers');
+            tagsEl.innerHTML = (alert.triggers || []).map(t => `<span class="trigger-tag">${t}</span>`).join('');
+            // LLM report
+            const llmBox = document.getElementById('llm-report-box');
+            const llmContent = document.getElementById('llm-report-content');
+            llmBox.style.display = 'block';
+            if (alert.llm_report) {
+                typewriterEffect(llmContent, alert.llm_report);
+            } else {
+                llmContent.innerHTML = llmOnline
+                    ? '<div class="llm-loading"><div class="llm-spinner"></div> Generating analysis...</div>'
+                    : '<span style="color:var(--text-muted)">AI analysis unavailable for this alert.</span>';
+            }
+            document.getElementById('alert-overlay').style.display = 'flex';
+        }
+
+        async function sendMockTrigger(type, port, score, pid) {
+            const btn = event.target;
+            const originalText = btn.innerText;
+            btn.innerText = "Injecting...";
+            // Keeping the button enabled as requested by user
+            
+            await fetch('/api/mock_trigger', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({type, port, score, pid})
+            });
+            
+            setTimeout(() => {
+                btn.innerText = originalText;
+            }, 1000);
+        }
+
+        async function handleAlertAction(action) {
+            const overlay = document.getElementById('alert-overlay');
+            overlay.style.animation = 'fadeOut 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards';
+            
+            setTimeout(() => {
+                overlay.style.display = 'none';
+                overlay.style.animation = 'fadeIn 0.4s cubic-bezier(0.16, 1, 0.3, 1)'; // reset animation
+            }, 300);
+
+            logTerminal(`[Action] System operator authorized '${action.toUpperCase()}' on target ${currentAlertData.port}`);
+            
+            if (action === 'terminate') {
+                await fetch('/api/kill', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({pid: currentAlertData.pid, port: currentAlertData.port})
+                });
+            } else if (action === 'allow') {
+                await fetch('/api/allow', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({port: currentAlertData.port})
+                });
+            }
+            
+            currentAlertData = null;
+        }
+
+        // Add dynamically injected CSS for fadeOut
+        const style = document.createElement('style');
+        style.innerHTML = `
+            @keyframes fadeOut {
+                from { opacity: 1; transform: translateY(0); }
+                to { opacity: 0; transform: translateY(20px); }
+            }
+        `;
+        document.head.appendChild(style);
+
+        // ── Tab switching ─────────────────────────────────────────────────────
+        function switchTab(name) {
+            ['geo','registry','quarantine'].forEach(t => {
+                document.getElementById('tab-' + t).style.display = 'none';
+                document.getElementById('tab-' + t).classList.remove('active');
+                document.getElementById('tabBtn-' + t).classList.remove('active');
+            });
+            document.getElementById('tab-' + name).style.display = 'flex';
+            document.getElementById('tab-' + name).classList.add('active');
+            document.getElementById('tabBtn-' + name).classList.add('active');
+        }
+        // Fix tab-pane initial display
+        document.getElementById('tab-geo').style.display = 'flex';
+        document.getElementById('tab-registry').style.display = 'none';
+        document.getElementById('tab-quarantine').style.display = 'none';
+
+        // ── LLM Typewriter effect ─────────────────────────────────────────────
+        function typewriterEffect(el, text) {
+            el.innerHTML = '';
+            let i = 0;
+            function tick() {
+                if (i < text.length) {
+                    el.innerHTML += text[i] === '<' ? '' : text[i];
+                    i++;
+                    setTimeout(tick, 18);
+                }
+            }
+            tick();
+        }
+
+        function showLLMReport(report) {
+            const llmBox = document.getElementById('llm-report-box');
+            const llmContent = document.getElementById('llm-report-content');
+            if (llmBox.style.display !== 'none') {
+                llmBox.style.display = 'block';
+                typewriterEffect(llmContent, report);
+            }
+        }
+
+        // ── Flag emoji helper ─────────────────────────────────────────────────
+        function getFlagEmoji(cc) {
+            if (!cc || cc.length !== 2) return '🌐';
+            return String.fromCodePoint(...[...cc.toUpperCase()].map(c => 0x1F1E6 - 65 + c.charCodeAt(0)));
+        }
+
+        // ── World map dot renderer ────────────────────────────────────────────
+        let llmOnline = true;
+        function placeMapDot(lat, lon, threat) {
+            const wrap = document.getElementById('map-dots');
+            // Convert lat/lon to % position on our 1000x500 viewBox
+            // lon: -180..180 → 0..100%, lat: 90..-90 → 0..100%
+            const x = ((lon + 180) / 360) * 100;
+            const y = ((90 - lat) / 180) * 100;
+            const dot = document.createElement('div');
+            dot.className = 'map-dot ' + (threat ? 'threat' : 'safe');
+            dot.style.left = x + '%';
+            dot.style.top = y + '%';
+            dot.title = `${lat.toFixed(1)}, ${lon.toFixed(1)}`;
+            wrap.appendChild(dot);
+            // Remove after 60s
+            setTimeout(() => dot.remove(), 60000);
+        }
+
+        // ── Geo-IP feed polling ───────────────────────────────────────────────
+        const geoEntries = new Set();
+        async function pollGeoFeed() {
+            try {
+                const res = await fetch('/api/geo_feed');
+                const data = await res.json();
+                const list = document.getElementById('geo-feed-list');
+                data.forEach(e => {
+                    const key = e.ip + e.time;
+                    if (geoEntries.has(key)) return;
+                    geoEntries.add(key);
+                    if (list.querySelector('.feed-empty')) list.innerHTML = '';
+                    const flag = getFlagEmoji(e.countryCode);
+                    const div = document.createElement('div');
+                    div.className = 'feed-entry';
+                    div.innerHTML = `
+                        <span class="flag">${flag}</span>
+                        <span class="badge ${e.blocked ? 'blocked' : 'safe'}">${e.blocked ? 'BLOCKED' : 'ALLOWED'}</span>
+                        <span><b style="color:var(--text-main)">${e.city}, ${e.country}</b> &nbsp;→ Port ${e.port} &nbsp;<span style="color:var(--text-muted);font-size:0.78rem">(${e.process})</span></span>
+                        <span class="meta">${e.time}</span>
+                    `;
+                    list.insertBefore(div, list.firstChild);
+                    if (e.lat && e.lon) placeMapDot(e.lat, e.lon, e.blocked);
+                    logTerminal(`GEO: ${e.city}, ${e.country} ${flag} — Port ${e.port} [${e.blocked ? 'BLOCKED' : 'ALLOWED'}]`, e.blocked ? 'danger' : 'info');
+                });
+            } catch(e) {}
+        }
+        setInterval(pollGeoFeed, 3000);
+
+        // ── Registry feed polling ─────────────────────────────────────────────
+        const regEntries = new Set();
+        async function pollRegistryFeed() {
+            try {
+                const res = await fetch('/api/registry_blocked');
+                const data = await res.json();
+                const list = document.getElementById('registry-feed-list');
+                data.forEach(e => {
+                    const key = e.blocked_at + e.value_name;
+                    if (regEntries.has(key)) return;
+                    regEntries.add(key);
+                    if (list.querySelector('.feed-empty')) list.innerHTML = '';
+                    const div = document.createElement('div');
+                    div.className = 'feed-entry';
+                    div.innerHTML = `
+                        <span class="badge blocked">BLOCKED</span>
+                        <span><b style="color:var(--accent-red)">${e.value_name}</b><br>
+                        <span style="color:var(--text-muted);font-size:0.75rem">${e.key}</span></span>
+                        <span class="meta">${e.blocked_at.split(' ')[1] || e.blocked_at}</span>
+                    `;
+                    list.insertBefore(div, list.firstChild);
+                });
+            } catch(e) {}
+        }
+        setInterval(pollRegistryFeed, 4000);
+
+        // ── Quarantine feed polling ───────────────────────────────────────────
+        const qEntries = new Set();
+        async function pollQuarantine() {
+            try {
+                const res = await fetch('/api/quarantine');
+                const data = await res.json();
+                const list = document.getElementById('quarantine-feed-list');
+                data.forEach(e => {
+                    const key = e.hash;
+                    if (qEntries.has(key)) return;
+                    qEntries.add(key);
+                    if (list.querySelector('.feed-empty')) list.innerHTML = '';
+                    const div = document.createElement('div');
+                    div.className = 'feed-entry';
+                    div.innerHTML = `
+                        <span class="badge blocked">QUARANTINED</span>
+                        <span><b style="color:var(--text-main)">${e.name}</b><br>
+                        <span style="color:var(--text-muted);font-size:0.75rem">${e.reason} &nbsp;·&nbsp; SHA256: ${e.hash.slice(0,16)}...</span></span>
+                        <span class="meta">${e.quarantined_at.split(' ')[1] || ''}</span>
+                    `;
+                    list.insertBefore(div, list.firstChild);
+                });
+            } catch(e) {}
+        }
+        setInterval(pollQuarantine, 5000);
+
+        // ── LLM status polling ────────────────────────────────────────────────
+        async function pollLLMStatus() {
+            try {
+                const res = await fetch('/api/llm_status');
+                const data = await res.json();
+                llmOnline = data.available;
+                const badge = document.getElementById('llm-status-badge');
+                if (llmOnline) {
+                    badge.textContent = `🤖 LLM: ${data.model.toUpperCase()}`;
+                    badge.style.background = 'rgba(16,185,129,0.1)';
+                    badge.style.borderColor = 'rgba(16,185,129,0.4)';
+                    badge.style.color = '#6ee7b7';
+                } else {
+                    badge.textContent = 'LLM OFFLINE';
+                    badge.style.background = 'rgba(239,68,68,0.1)';
+                    badge.style.borderColor = 'rgba(239,68,68,0.3)';
+                    badge.style.color = '#f87171';
+                }
+            } catch(e) {}
+        }
+        pollLLMStatus();
+        setInterval(pollLLMStatus, 30000);
+
+        // ── Spam / Scam Lookup ────────────────────────────────────────────────
+        const spamHistory = [];   // { query, result }
+
+        /** Live badge as user types */
+        function updateSpamTypeBadge(val) {
+            const badge = document.getElementById('spam-type-badge');
+            const emailRx = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+            const phoneRx = /^[\+\d][\d\s\-().+]{4,}$/;
+            const v = val.trim();
+            if (!v) {
+                badge.className = 'spam-type-badge spam-type-unknown';
+                badge.textContent = '📥 AUTO-DETECT';
+            } else if (emailRx.test(v)) {
+                badge.className = 'spam-type-badge spam-type-email';
+                badge.textContent = '✉️ EMAIL DETECTED';
+            } else if (phoneRx.test(v)) {
+                badge.className = 'spam-type-badge spam-type-phone';
+                badge.textContent = '📞 PHONE DETECTED';
+            } else {
+                badge.className = 'spam-type-badge spam-type-unknown';
+                badge.textContent = '🔍 ENTER VALID EMAIL OR PHONE';
+            }
+        }
+
+        /** Animate the circular SVG gauge from 0 → target % */
+        function animateGauge(score, color) {
+            const arc       = document.getElementById('spam-gauge-arc');
+            const numEl     = document.getElementById('spam-gauge-num');
+            const circumference = 251.3; // 2π × 40
+
+            // Set color
+            arc.style.stroke = color;
+            numEl.style.color = color;
+
+            // Animate offset: offset = circumf - (score/100 × circumf)
+            const targetOffset = circumference - (score / 100) * circumference;
+
+            // Count-up animation for the number
+            let current = 0;
+            const steps = 40;
+            const increment = score / steps;
+            const interval = 700 / steps;   // total ~700 ms
+            const counter = setInterval(() => {
+                current = Math.min(current + increment, score);
+                numEl.textContent = Math.round(current) + '%';
+                if (current >= score) clearInterval(counter);
+            }, interval);
+
+            // SVG arc animates via CSS transition
+            requestAnimationFrame(() => {
+                arc.style.strokeDashoffset = targetOffset;
+            });
+        }
+
+        /** Render full result into the UI */
+        function renderSpamResult(result) {
+            const resultDiv = document.getElementById('spam-result');
+            const loading   = document.getElementById('spam-loading');
+            loading.style.display = 'none';
+
+            // Choose color
+            const color = result.verdict_color || '#10b981';
+
+            // Verdict
+            document.getElementById('spam-verdict-text').style.color = color;
+            document.getElementById('spam-verdict-text').textContent  = result.verdict;
+            document.getElementById('spam-verdict-sub').textContent   =
+                result.type === 'email'
+                    ? `Email heuristic analysis complete`
+                    : `Phone number pattern analysis complete`;
+
+            // Gauge
+            animateGauge(result.score, color);
+
+            // Flags
+            const flagList = document.getElementById('spam-flags-list');
+            flagList.innerHTML = '';
+            (result.flags || []).forEach(f => {
+                const li = document.createElement('li');
+                if (f.toLowerCase().includes('no threat') || f.toLowerCase().includes('passed')) {
+                    li.className = 'clean';
+                }
+                li.textContent = f;
+                flagList.appendChild(li);
+            });
+
+            // Details (technical)
+            const detailsBox = document.getElementById('spam-details-box');
+            if (result.details && result.details.length > 0) {
+                detailsBox.style.display = 'block';
+                detailsBox.innerHTML = result.details.map(d => `> ${d}`).join('<br>');
+            } else {
+                detailsBox.style.display = 'none';
+            }
+
+            // Show result panel with animation
+            resultDiv.style.display = 'flex';
+
+            // Terminal log
+            const typeIcon = result.type === 'email' ? '✉️' : '📞';
+            logTerminal(
+                `SPAM LOOKUP ${typeIcon}: "${result.input}" → ${result.verdict} [${result.score}% risk]`,
+                result.score >= 70 ? 'danger' : result.score >= 40 ? 'warn' : 'info'
+            );
+        }
+
+        /** Persist history and re-render history list */
+        function addSpamHistory(query, result) {
+            // Deduplicate
+            const existing = spamHistory.findIndex(h => h.query === query);
+            if (existing !== -1) spamHistory.splice(existing, 1);
+            spamHistory.unshift({ query, result });
+            if (spamHistory.length > 8) spamHistory.pop();
+            renderSpamHistory();
+        }
+
+        function renderSpamHistory() {
+            const historyEl = document.getElementById('spam-history');
+            const listEl    = document.getElementById('spam-history-items');
+            if (spamHistory.length === 0) { historyEl.style.display = 'none'; return; }
+            historyEl.style.display = 'block';
+            listEl.innerHTML = '';
+            spamHistory.forEach(({ query, result }) => {
+                const item = document.createElement('div');
+                item.className = 'spam-history-item';
+                const icon = result.type === 'email' ? '✉️' : '📞';
+                const verdictColor = result.verdict_color || '#10b981';
+                item.innerHTML = `
+                    <span class="spam-history-icon">${icon}</span>
+                    <span class="spam-history-text" title="${query}">${query}</span>
+                    <span class="spam-history-verdict" style="color:${verdictColor}">${result.verdict}</span>
+                `;
+                item.addEventListener('click', () => {
+                    document.getElementById('spam-query').value = query;
+                    updateSpamTypeBadge(query);
+                    renderSpamResult(result);
+                });
+                listEl.appendChild(item);
+            });
+        }
+
+        /** Main lookup handler */
+        async function runSpamLookup() {
+            const query = document.getElementById('spam-query').value.trim();
+            if (!query) {
+                document.getElementById('spam-query').focus();
+                document.getElementById('spam-query').style.borderColor = '#ef4444';
+                setTimeout(() => {
+                    document.getElementById('spam-query').style.borderColor = '';
+                }, 1200);
+                return;
+            }
+
+            // UI: loading state
+            const btn = document.getElementById('spam-btn');
+            btn.textContent = 'Analyzing…';
+            btn.disabled = true;
+
+            const resultDiv  = document.getElementById('spam-result');
+            const loadingDiv = document.getElementById('spam-loading');
+            resultDiv.style.display  = 'none';
+            loadingDiv.style.display = 'flex';
+
+            // Reset gauge
+            document.getElementById('spam-gauge-arc').style.strokeDashoffset = '251.3';
+            document.getElementById('spam-gauge-num').textContent = '0%';
+
+            try {
+                const res = await fetch('/api/spam_lookup', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ query })
+                });
+                const data = await res.json();
+
+                if (data.error) {
+                    loadingDiv.style.display = 'none';
+                    logTerminal(`SPAM LOOKUP ERROR: ${data.error}`, 'warn');
+                    // Show error inline
+                    resultDiv.style.display = 'flex';
+                    document.getElementById('spam-verdict-text').style.color = '#6b7280';
+                    document.getElementById('spam-verdict-text').textContent = 'ERROR';
+                    document.getElementById('spam-verdict-sub').textContent  = data.error;
+                    document.getElementById('spam-flags-list').innerHTML = '';
+                    document.getElementById('spam-details-box').style.display = 'none';
+                    animateGauge(0, '#6b7280');
+                } else {
+                    renderSpamResult(data);
+                    addSpamHistory(query, data);
+                }
+            } catch (err) {
+                loadingDiv.style.display = 'none';
+                logTerminal(`SPAM LOOKUP: Network error — ${err.message}`, 'danger');
+            } finally {
+                btn.textContent = 'Analyze';
+                btn.disabled = false;
+            }
+        }
+
+    </script>
+</body>
+</html>
